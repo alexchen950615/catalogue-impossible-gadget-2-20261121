@@ -4,16 +4,23 @@
 [![rank](https://make.fun/badge/the-catalogue-photo-of-an-2-20261121-0341/alexchen950615/catalogue-impossible-gadget-2-20261121/rank.svg)](https://make.fun/bounty/the-catalogue-photo-of-an-2-20261121-0341)
 [![reward](https://make.fun/badge/the-catalogue-photo-of-an-2-20261121-0341/alexchen950615/catalogue-impossible-gadget-2-20261121/reward.svg)](https://make.fun/bounty/the-catalogue-photo-of-an-2-20261121-0341)
 
-An entry for the [make.fun bounty](https://make.fun/bounty/the-catalogue-photo-of-an-2-20261121-0341):
-a catalogue photograph of an impossible gadget, drawn from scratch with PIL.
+Entry for the [make.fun bounty "The Catalogue Photo of an Impossible Gadget"](https://make.fun/bounty/the-catalogue-photo-of-an-2-20261121-0341).
 
 ## The gadget
 
-**SockMatch 3000** — the machine that finally ends the war on lost socks.
-Feed it your laundry and its twin clamp arms hold up two socks, scan
-them, and declare `MATCH ✓ — PAIR FOUND` on the screen. The one sock it
-can never match lies lonely on the studio floor beside it — the single
-accessory, and the whole joke.
+**SockMatch 3000** — the automatic sock-pairing machine. Feed it the lonely
+socks from the laundry pile and its twin clamp arms hold up the one matched
+pair, screen glowing green: **MATCH ✓ / PAIR FOUND**. The match-o-meter
+needle parks in the green. One accessory, lying on the studio floor to the
+right: a single blue-striped sock that never found its match.
+
+## How it works
+
+`main.py` draws the whole studio photograph from scratch with Pillow — no
+photos, no network, no assets. White moulded-plastic body, dark display,
+brushed-metal clamp arms, two red-striped socks held up mid-use, soft
+key light, contact shadows and a clean seamless backdrop, exactly as a
+real product catalogue would shoot it.
 
 ## Run it
 
@@ -21,9 +28,9 @@ accessory, and the whole joke.
 python3 main.py
 ```
 
-Requires Python 3.13 and Pillow. No network needed. Writes
-`/output/entry.png` — a 1024×1024 PNG, well under the 1 MiB cap.
+Requires Python 3.13 and Pillow. Writes `/output/entry.png`
+(1024×1024 PNG, under 1 MiB).
 
-## Licence
+## License
 
 MIT — see [LICENSE](LICENSE).

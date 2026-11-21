@@ -1,212 +1,314 @@
 #!/usr/bin/env python3
-"""SockMatch 3000 — a catalogue photograph of an impossible gadget.
+"""SockMatch 3000 - catalogue photograph of an impossible gadget.
 
-Draws, from scratch with PIL, a studio product shot of a small machine
-that automatically pairs socks: two identical striped socks hang from
-its twin clamp arms while its screen reads MATCH, and one lonely odd
-sock lies on the floor beside it as the single accessory.
+Draws, from scratch with Pillow only, a studio product shot of a small
+white machine that automatically pairs socks. Two metal clamp arms hold
+up a freshly matched pair of red-striped socks; the screen reads
+MATCH / PAIR FOUND. Exactly one accessory: a single lonely blue-striped
+sock lying on the floor to the right.
 
-Output: /output/entry.png (1024x1024 PNG, < 1 MiB).
+Output: /output/entry.png (1024x1024 PNG, <= 1 MiB). No network.
 """
+
 import math
 import os
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-W = H = 1024
+W, H = 1024, 1024
 OUT = "/output/entry.png"
-FONT_DIR = "/usr/share/fonts/truetype/dejavu"
 
 # ---------------------------------------------------------------- palette
-BG_TOP = (245, 243, 239)
-BG_BOT = (214, 210, 203)
-FLOOR_Y = 800
-BODY = (248, 248, 246)
-BODY_EDGE = (205, 205, 200)
-BODY_SHADE = (228, 228, 224)
-METAL = (176, 180, 186)
-METAL_DARK = (120, 124, 130)
-DARK = (32, 36, 42)
-SCREEN = (24, 30, 36)
+BG_TOP = (250, 248, 245)
+BG_MID = (242, 239, 234)
+FLOOR_TOP = (232, 228, 222)
+FLOOR_BOT = (214, 209, 202)
+BODY = (252, 252, 250)
+BODY_EDGE = (190, 188, 182)
+DARK = (38, 40, 44)
+SCREEN = (16, 22, 20)
 GREEN = (46, 204, 113)
-GREEN_DIM = (28, 140, 78)
-RED = (214, 64, 64)
-BLUE = (66, 110, 190)
-SOCK_WHITE = (250, 250, 248)
-GREY_TEXT = (110, 110, 108)
+GREEN_DK = (30, 160, 84)
+METAL = (196, 198, 202)
+METAL_DK = (140, 142, 148)
+METAL_LT = (232, 233, 235)
+RED = (214, 48, 49)
+BLUE = (52, 120, 198)
+INK = (52, 54, 58)
+SOFT = (120, 116, 108)
 
 
-def font(name, size):
-    path = os.path.join(FONT_DIR, name)
-    try:
-        return ImageFont.truetype(path, size)
-    except OSError:
-        return ImageFont.load_default()
+def load_font(bold=False, size=24):
+    """DejaVu ships with most Linux images; fall back to the bitmap font."""
+    cands = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for path in cands:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    return ImageFont.load_default(size)
 
 
-# ---------------------------------------------------------------- backdrop
-def backdrop():
-    img = Image.new("RGB", (W, H))
+def vgrad(size, top, bottom):
+    """Vertical gradient image."""
+    w, h = size
+    img = Image.new("RGB", (1, h))
     px = img.load()
-    for y in range(H):
-        t = y / (H - 1)
-        # gentle vertical gradient, slightly warmer at the top
-        r = int(BG_TOP[0] + (BG_BOT[0] - BG_TOP[0]) * t)
-        g = int(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t)
-        b = int(BG_TOP[2] + (BG_BOT[2] - BG_TOP[2]) * t)
-        for x in range(W):
-            px[x, y] = (r, g, b)
-    # soft radial studio glow behind the product
-    glow = Image.new("L", (W, H), 0)
-    gd = ImageDraw.Draw(glow)
-    gd.ellipse([180, 60, 844, 760], fill=42)
-    glow = glow.filter(ImageFilter.GaussianBlur(120))
-    img = Image.composite(
-        Image.new("RGB", (W, H), (255, 255, 252)), img, glow)
-    return img
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        px[0, y] = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
+    return img.resize((w, h))
 
 
 def soft_shadow(base, box, blur, alpha):
-    """Draw a blurred dark ellipse onto base (RGBA overlay)."""
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    """Blurred dark ellipse shadow pasted onto base."""
+    layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
-    d.ellipse(box, fill=(40, 36, 30, alpha))
+    d.ellipse(box, fill=(60, 55, 48, alpha))
     layer = layer.filter(ImageFilter.GaussianBlur(blur))
     base.alpha_composite(layer)
 
 
-# ---------------------------------------------------------------- sock
-def draw_sock(d, x, top_y, height, colour, stripe, foot_dir, scale=1.0):
-    """A hanging sock: vertical tube, then a foot bending foot_dir (+1 right,
-    -1 left). x is the centre of the tube; the cuff is at top_y."""
-    w = int(74 * scale)
-    leg_h = int(height * 0.62)
-    foot_h = int(64 * scale)
-    foot_len = int(96 * scale)
-    # leg tube
-    d.rounded_rectangle([x - w // 2, top_y, x + w // 2, top_y + leg_h + 10],
-                        radius=int(20 * scale), fill=SOCK_WHITE,
-                        outline=(190, 190, 186), width=2)
-    # foot: horizontal rounded bar bending away from the leg
-    foot_top = top_y + leg_h - 8
-    fx0 = x if foot_dir > 0 else x - foot_len
-    fx1 = x + foot_len if foot_dir > 0 else x
-    d.rounded_rectangle([fx0, foot_top, fx1, foot_top + foot_h],
-                        radius=int(20 * scale), fill=SOCK_WHITE,
-                        outline=(190, 190, 186), width=2)
-    # toe cap at the far end of the foot
-    toe_cx = x + foot_dir * (foot_len - int(8 * scale))
-    toe_cy = foot_top + foot_h // 2
-    d.ellipse([toe_cx - int(18 * scale), toe_cy - int(20 * scale),
-               toe_cx + int(18 * scale), toe_cy + int(20 * scale)],
-              fill=colour)
-    # cuff band + stripes on the leg
-    d.rectangle([x - w // 2, top_y, x + w // 2, top_y + int(26 * scale)],
-                fill=colour)
-    for i, sy in enumerate((0.30, 0.45)):
-        y0 = top_y + int(leg_h * sy)
-        d.rectangle([x - w // 2, y0, x + w // 2, y0 + int(14 * scale)],
-                    fill=stripe)
-    # soft shading on the leg's outer edge
-    sx0 = x + foot_dir * (w // 2 - 10)
-    sx1 = x + foot_dir * (w // 2)
-    d.rectangle([min(sx0, sx1), top_y + int(30 * scale),
-                 max(sx0, sx1), top_y + leg_h],
-                fill=(226, 226, 222))
+def rrect(d, box, radius, **kw):
+    d.rounded_rectangle(box, radius=radius, **kw)
 
 
-def draw_flat_sock(d, cx, cy, angle, colour, stripe):
-    """One lonely sock lying flat on the floor, rotated a little."""
-    sock = Image.new("RGBA", (260, 120), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(sock)
-    # leg lying horizontally, foot pointing right-down
-    sd.rounded_rectangle([10, 28, 170, 78], radius=22, fill=SOCK_WHITE,
-                         outline=(190, 190, 186), width=2)
-    sd.polygon([(150, 28), (210, 44), (238, 66), (228, 92), (196, 96),
-                (150, 78)], fill=SOCK_WHITE, outline=(190, 190, 186))
-    sd.ellipse([206, 62, 242, 98], fill=colour)  # toe
-    sd.rectangle([10, 28, 44, 78], fill=colour)  # cuff
-    for x0 in (78, 108):
-        sd.rectangle([x0, 28, x0 + 13, 78], fill=stripe)
-    sock = sock.rotate(angle, expand=True, resample=Image.BICUBIC)
-    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    base.alpha_composite(sock, (cx - sock.width // 2, cy - sock.height // 2))
-    return base
+# ------------------------------------------------------------------- socks
+def make_sock(stripe, scale=1.0, flip=False):
+    """Return an RGBA image of one hanging sock.
+
+    Local layout (before scaling): cuff across the top, leg hanging down,
+    foot bending to the right at the ankle, toe cap in the stripe colour.
+    """
+    sw, sh = int(120 * scale), int(300 * scale)
+    sock = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    d = ImageDraw.Draw(sock)
+    s = scale
+
+    # Silhouette mask: leg + foot.
+    mask = Image.new("L", (sw, sh), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle([18 * s, 6 * s, 102 * s, 185 * s], radius=26 * s, fill=255)
+    md.rounded_rectangle([18 * s, 150 * s, 118 * s, 235 * s], radius=34 * s, fill=255)
+    md.ellipse([86 * s, 168 * s, 122 * s, 252 * s], fill=255)
+    md.rectangle([18 * s, 150 * s, 105 * s, 235 * s], fill=255)
+
+    # White body, then stripes clipped by the silhouette.
+    body = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(body)
+    bd.rectangle([0, 0, sw, sh], fill=(250, 250, 248, 255))
+    for y0 in (52, 96, 140, 196):
+        bd.rectangle([0, y0 * s, sw, (y0 + 20) * s], fill=stripe + (255,))
+    # Cuff band at the top, striped.
+    bd.rectangle([0, 6 * s, sw, 40 * s], fill=(244, 244, 242, 255))
+    for x0 in (26, 58, 90):
+        bd.rectangle([x0 * s, 6 * s, (x0 + 12) * s, 40 * s], fill=stripe + (255,))
+    # Toe cap.
+    bd.ellipse([84 * s, 176 * s, 122 * s, 250 * s], fill=stripe + (255,))
+    # Heel patch.
+    bd.ellipse([6 * s, 168 * s, 40 * s, 214 * s], fill=(238, 238, 236, 255))
+    # Soft shading on the right edge of the leg.
+    bd.rectangle([96 * s, 40 * s, 104 * s, 185 * s], fill=(0, 0, 0, 22))
+    body.putalpha(Image.composite(body.split()[3], Image.new("L", (sw, sh), 0), mask))
+    sock.alpha_composite(body)
+
+    # Cuff ribbing lines.
+    d.line([(22 * s, 14 * s), (22 * s, 34 * s)], fill=(0, 0, 0, 40), width=max(2, int(2 * s)))
+    d.line([(98 * s, 14 * s), (98 * s, 34 * s)], fill=(0, 0, 0, 40), width=max(2, int(2 * s)))
+    if flip:
+        sock = sock.transpose(Image.FLIP_LEFT_RIGHT)
+    return sock
 
 
-# ---------------------------------------------------------------- device
-def draw_device(img):
-    d = ImageDraw.Draw(img)
-    # ---- clamp arms (metal rods from the body top corners)
-    for sgn in (-1, 1):
-        x0 = 512 + sgn * 108
-        x1 = 512 + sgn * 214
-        d.line([x0, 400, x1, 318], fill=METAL_DARK, width=14)
-        d.line([x0, 396, x1, 314], fill=METAL, width=7)
-        # clamp jaws at the rod tip
-        jx, jy = x1, 318
-        d.rounded_rectangle([jx - 16, jy - 6, jx + 16, jy + 26], radius=7,
-                            fill=METAL_DARK)
-        d.rectangle([jx - 20, jy + 18, jx + 20, jy + 30], fill=DARK)
-    # ---- hanging socks (the matched pair)
-    draw_sock(d, 298, 344, 250, RED, RED, -1)
-    draw_sock(d, 726, 344, 250, RED, RED, +1)
-    # ---- body
-    d.rounded_rectangle([384, 388, 640, 748], radius=40, fill=BODY,
-                        outline=BODY_EDGE, width=3)
-    # right-side shading + top highlight for a manufactured look
-    d.rounded_rectangle([600, 388, 640, 748], radius=40, fill=BODY_SHADE)
-    d.rounded_rectangle([384, 388, 640, 748], radius=40, outline=BODY_EDGE,
-                        width=3)
-    d.rounded_rectangle([396, 400, 628, 428], radius=14, fill=(255, 255, 255))
-    # ---- screen
-    d.rounded_rectangle([436, 428, 588, 500], radius=12, fill=SCREEN)
-    f_big = font("DejaVuSans-Bold.ttf", 30)
-    f_small = font("DejaVuSans.ttf", 17)
-    d.text((512, 452), "MATCH ✓", font=f_big, fill=GREEN, anchor="mm")
-    d.text((512, 482), "PAIR FOUND", font=f_small, fill=(150, 190, 165),
-           anchor="mm")
-    # ---- LED
-    d.ellipse([600, 446, 622, 468], fill=GREEN)
-    d.ellipse([604, 450, 618, 464], fill=(140, 255, 180))
-    # ---- dial
-    cx, cy, r = 512, 610, 58
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(236, 236, 233),
-              outline=METAL_DARK, width=3)
-    d.ellipse([cx - r + 12, cy - r + 12, cx + r - 12, cy + r - 12],
-              fill=(250, 250, 248), outline=(200, 200, 196), width=2)
-    for i in range(9):
-        a = math.radians(210 + i * 30)
-        x0 = cx + int(math.cos(a) * (r - 18))
-        y0 = cy + int(math.sin(a) * (r - 18))
-        x1 = cx + int(math.cos(a) * (r - 26))
-        y1 = cy + int(math.sin(a) * (r - 26))
-        d.line([x0, y0, x1, y1], fill=METAL_DARK, width=3)
-    a = math.radians(300)
-    d.line([cx, cy, cx + int(math.cos(a) * (r - 28)),
-            cy + int(math.sin(a) * (r - 28))], fill=RED, width=5)
-    d.ellipse([cx - 8, cy - 8, cx + 8, cy + 8], fill=DARK)
-    # ---- brand label
-    f_brand = font("DejaVuSans-Bold.ttf", 22)
-    d.text((512, 706), "SOCKMATCH 3000", font=f_brand, fill=GREY_TEXT,
-           anchor="mm")
-    # ---- feet
-    d.rounded_rectangle([420, 748, 468, 766], radius=6, fill=DARK)
-    d.rounded_rectangle([556, 748, 604, 766], radius=6, fill=DARK)
+def make_flat_sock(stripe):
+    """One sock lying flat on the floor (the lonely accessory)."""
+    sw, sh = 210, 110
+    sock = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    mask = Image.new("L", (sw, sh), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle([6, 18, 150, 92], radius=30, fill=255)
+    md.ellipse([118, 14, 204, 96], fill=255)
+    md.rectangle([118, 18, 168, 92], fill=255)
+    body = Image.new("RGBA", (sw, sh), (250, 250, 248, 255))
+    bd = ImageDraw.Draw(body)
+    for x0 in (34, 74, 114):
+        bd.rectangle([x0, 18, x0 + 16, 92], fill=stripe + (255,))
+    bd.ellipse([152, 24, 200, 86], fill=stripe + (255,))
+    bd.rectangle([6, 18, 30, 92], fill=(244, 244, 242, 255))
+    bd.rectangle([178, 18, 184, 92], fill=(0, 0, 0, 18))
+    body.putalpha(Image.composite(body.split()[3], Image.new("L", (sw, sh), 0), mask))
+    sock.alpha_composite(body)
+    return sock
 
 
+# ------------------------------------------------------------------- arms
+def draw_arm(d, base_xy, tip_xy, width=20):
+    """A brushed-metal clamp arm: dark under-stroke, light core, joint."""
+    d.line([base_xy, tip_xy], fill=METAL_DK, width=width + 6)
+    d.line([base_xy, tip_xy], fill=METAL, width=width)
+    d.line([base_xy, tip_xy], fill=METAL_LT, width=max(4, width // 3))
+    d.ellipse([base_xy[0] - 14, base_xy[1] - 14, base_xy[0] + 14, base_xy[1] + 14],
+              fill=METAL_DK, outline=METAL_LT, width=3)
+    d.ellipse([base_xy[0] - 6, base_xy[1] - 6, base_xy[0] + 6, base_xy[1] + 6],
+              fill=DARK)
+
+
+def draw_clamp(d, tip_xy):
+    """Small dark gripper jaw at the end of an arm."""
+    x, y = tip_xy
+    d.rounded_rectangle([x - 26, y - 12, x + 26, y + 12], radius=6,
+                        fill=DARK, outline=(0, 0, 0), width=2)
+    d.rectangle([x - 26, y - 12, x - 12, y + 12], fill=(70, 72, 76))
+    d.rectangle([x + 12, y - 12, x + 26, y + 12], fill=(70, 72, 76))
+
+
+# ------------------------------------------------------------------- main
 def main():
-    img = backdrop().convert("RGBA")
-    # floor shadows first
-    soft_shadow(img, [220, 756, 804, 812], 18, 90)
-    soft_shadow(img, [760, 800, 980, 836], 10, 70)
-    # lonely odd sock (the accessory) lying on the floor, right side
-    img.alpha_composite(draw_flat_sock(ImageDraw.Draw(img), 872, 806, -8,
-                                       BLUE, BLUE))
-    draw_device(img)
-    img = img.convert("RGB")
-    os.makedirs("/output", exist_ok=True)
-    img.save(OUT, "PNG", optimize=True)
-    print(f"wrote {OUT}: {img.size}, {os.path.getsize(OUT)} bytes")
+    img = Image.new("RGBA", (W, H))
+    bg = vgrad((W, H), BG_TOP, BG_MID).convert("RGBA")
+    img.paste(bg, (0, 0))
+
+    # Soft key-light bloom, upper left.
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([-260, -320, 620, 420], fill=(255, 255, 255, 60))
+    glow = glow.filter(ImageFilter.GaussianBlur(120))
+    img.alpha_composite(glow)
+
+    # Floor: horizon at y=772, gentle gradient below it.
+    floor = vgrad((W, H - 772), FLOOR_TOP, FLOOR_BOT).convert("RGBA")
+    img.paste(floor, (0, 772))
+    d = ImageDraw.Draw(img)
+    d.line([(0, 772), (W, 772)], fill=(198, 192, 184), width=2)
+
+    # Contact shadows (device + lonely sock), before the objects.
+    soft_shadow(img, (210, 726, 780, 786), 16, 90)
+    soft_shadow(img, (742, 812, 986, 852), 10, 70)
+
+    # (Arms and socks are drawn after the body, below, so they hang in
+    # front of the machine and the whole sock - foot included - reads.)
+
+    # ---------------------------------------------------------- the body
+    body_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(body_layer)
+    rrect(bd, (252, 372, 728, 730), 40, fill=BODY + (255,),
+          outline=BODY_EDGE, width=3)
+    # Side shading + top highlight so the white shell reads as moulded plastic.
+    rrect(bd, (688, 380, 726, 722), 30, fill=(0, 0, 0, 18))
+    rrect(bd, (254, 374, 292, 722), 30, fill=(255, 255, 255, 90))
+    rrect(bd, (268, 380, 712, 404), 18, fill=(255, 255, 255, 140))
+    # Plinth / base.
+    rrect(bd, (238, 722, 742, 752), 16, fill=(74, 76, 80, 255))
+    rrect(bd, (238, 722, 742, 736), 16, fill=(104, 106, 110, 255))
+    img.alpha_composite(body_layer)
+    d = ImageDraw.Draw(img)
+
+    # ---------------------------------------------------------- clamp arms
+    # Arms rise from the top of the body and hold the socks up in the air.
+    draw_arm(d, (392, 372), (330, 150))
+    draw_arm(d, (588, 372), (650, 150))
+    draw_clamp(d, (330, 150))
+    draw_clamp(d, (650, 150))
+
+    # ---------------------------------------------------------- the socks
+    # In front of the body, cuffs gripped by the clamps, feet dangling
+    # free so the pair reads as socks at a glance.
+    left_sock = make_sock(RED, scale=0.75)
+    right_sock = make_sock(RED, scale=0.75, flip=True)
+    left_sock = left_sock.rotate(7, expand=True, resample=Image.BICUBIC)
+    right_sock = right_sock.rotate(-7, expand=True, resample=Image.BICUBIC)
+    img.alpha_composite(left_sock, (285, 152))
+    img.alpha_composite(right_sock, (605, 152))
+    d = ImageDraw.Draw(img)
+
+    # Brand name, small and centred above the screen.
+    brand = load_font(bold=True, size=30)
+    label = "SOCKMATCH 3000"
+    tw = d.textlength(label, font=brand)
+    d.text(((252 + 728) / 2 - tw / 2, 388), label, font=brand, fill=INK)
+    sub = load_font(size=15)
+    sublabel = "A U T O M A T I C   S O C K   P A I R I N G   S Y S T E M"
+    tw = d.textlength(sublabel, font=sub)
+    d.text(((252 + 728) / 2 - tw / 2, 424), sublabel, font=sub, fill=SOFT)
+
+    # ---------------------------------------------------------- the screen
+    rrect(d, (292, 452, 566, 586), 18, fill=SCREEN, outline=(0, 0, 0), width=2)
+    rrect(d, (300, 460, 558, 474), 8, fill=(255, 255, 255, 26))
+    # Green glow behind the verdict.
+    glow2 = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd2 = ImageDraw.Draw(glow2)
+    gd2.ellipse([330, 470, 530, 560], fill=GREEN + (70,))
+    img.alpha_composite(glow2.filter(ImageFilter.GaussianBlur(18)))
+    d = ImageDraw.Draw(img)
+    big = load_font(bold=True, size=52)
+    verdict = "MATCH ✓"
+    tw = d.textlength(verdict, font=big)
+    d.text(((292 + 566) / 2 - tw / 2, 472), verdict, font=big, fill=GREEN)
+    small = load_font(bold=True, size=24)
+    found = "PAIR FOUND"
+    tw = d.textlength(found, font=small)
+    d.text(((292 + 566) / 2 - tw / 2, 536), found, font=small, fill=(200, 255, 220))
+
+    # ---------------------------------------------------------- the dial
+    cx, cy, r = 648, 519, 62
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(245, 245, 243),
+              outline=BODY_EDGE, width=3)
+    d.ellipse([cx - r + 10, cy - r + 10, cx + r - 10, cy + r - 10],
+              outline=(200, 198, 192), width=2)
+    for i, ang in enumerate(range(-210, 31, 30)):
+        a = math.radians(ang)
+        x1 = cx + (r - 16) * math.cos(a)
+        y1 = cy + (r - 16) * math.sin(a)
+        x2 = cx + (r - 6) * math.cos(a)
+        y2 = cy + (r - 6) * math.sin(a)
+        col = GREEN_DK if i >= 5 else (150, 148, 142)
+        d.line([(x1, y1), (x2, y2)], fill=col, width=4)
+    # Needle parked in the green zone.
+    a = math.radians(-30)
+    d.line([(cx, cy), (cx + (r - 22) * math.cos(a), cy + (r - 22) * math.sin(a))],
+           fill=RED, width=5)
+    d.ellipse([cx - 9, cy - 9, cx + 9, cy + 9], fill=DARK)
+
+    # Status LED + buttons under the screen.
+    d.ellipse([306, 606, 322, 622], fill=GREEN)
+    led_f = load_font(bold=True, size=16)
+    d.text((330, 604), "READY", font=led_f, fill=INK)
+    for i, label in enumerate(("SCAN", "PAIR", "FOLD")):
+        x0 = 452 + i * 62
+        rrect(d, (x0, 602, x0 + 52, 628), 10,
+              fill=(238, 238, 236), outline=BODY_EDGE, width=2)
+        bf = load_font(bold=True, size=13)
+        tw = d.textlength(label, font=bf)
+        d.text((x0 + 26 - tw / 2, 608), label, font=bf, fill=INK)
+    # Model plate, bottom right of the face.
+    plate = load_font(size=14)
+    d.text((640, 668), "MODEL SM-3000", font=plate, fill=SOFT)
+    d.text((640, 688), "110-240 V - 50/60 Hz", font=plate, fill=SOFT)
+
+    # ---------------------------------------------------------- the accessory
+    lone = make_flat_sock(BLUE)
+    lone = lone.rotate(-12, expand=True, resample=Image.BICUBIC)
+    img.alpha_composite(lone, (760, 786))
+
+    # ---------------------------------------------------------- finish
+    # Gentle vignette so the product stays the hero.
+    vig = Image.new("L", (W, H), 0)
+    vd = ImageDraw.Draw(vig)
+    vd.ellipse([-140, -140, W + 140, H + 140], fill=255)
+    vig = vig.filter(ImageFilter.GaussianBlur(180))
+    dark = Image.new("RGBA", (W, H), (40, 34, 26, 42))
+    img.paste(Image.composite(img, dark, vig), (0, 0))
+
+    out = img.convert("RGB")
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    out.save(OUT, format="PNG", optimize=True)
+    size = os.path.getsize(OUT)
+    print(f"wrote {OUT}: {out.size[0]}x{out.size[1]}, {size} bytes")
+    assert out.size[0] <= 1024 and out.size[1] <= 1024
+    assert size <= 1_048_576
 
 
 if __name__ == "__main__":
